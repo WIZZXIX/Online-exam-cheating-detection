@@ -1,8 +1,6 @@
 from flask import Blueprint, request, jsonify
-import cv2
+import cv2, base64, time
 import numpy as np
-import base64
-import time
 
 from proctoring.face import analyze_face
 from proctoring.phone import detect_phone
@@ -11,28 +9,21 @@ from db.attempts import evaluate_attempt
 
 proctoring_bp = Blueprint("proctoring", __name__)
 
-# -------------------------------
-# Cooldowns (route-level state)
-# -------------------------------
-last_face_log = {}
-last_phone_log = {}
+# state
+last_direction = "CENTER"
+last_log_time = 0
+LOG_COOLDOWN = 2
 
-FACE_COOLDOWN = 2      # seconds
-PHONE_COOLDOWN = 3     # seconds
 
-# -------------------------------
-# ANALYZE FRAME
-# -------------------------------
 @proctoring_bp.route("/analyze-frame", methods=["POST"])
 def analyze_frame():
+    global last_direction, last_log_time
+
     data = request.json
-    image = data["image"]
     attempt_id = data["attempt_id"]
 
-    # ---------- Decode Image ----------
-    image_bytes = base64.b64decode(image.split(",")[1])
-    np_arr = np.frombuffer(image_bytes, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    image_bytes = base64.b64decode(data["image"].split(",")[1])
+    frame = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
 
     response = {
         "faces_detected": 0,
@@ -42,32 +33,25 @@ def analyze_frame():
         "warning": None
     }
 
-    now = time.time()
-
-    # ---------- PHONE DETECTION ----------
+    # 📱 PHONE DETECTION
     phone_detected = detect_phone(frame)
     response["phone_detected"] = phone_detected
 
     if phone_detected:
-        last_time = last_phone_log.get(attempt_id, 0)
-        if now - last_time > PHONE_COOLDOWN:
-            log_event("PHONE_DETECTED", attempt_id)
-            last_phone_log[attempt_id] = now
+        log_event("PHONE_DETECTED", attempt_id)
 
-    # ---------- FACE ANALYSIS ----------
+    # 👤 FACE ANALYSIS
     face_result = analyze_face(frame)
 
-    response["faces_detected"] = face_result["faces_detected"]
+    response["faces_detected"] = face_result["faces"]
     response["direction"] = face_result["direction"]
 
-    if face_result["event"]:
-        last_time = last_face_log.get((attempt_id, face_result["event"]), 0)
-        if now - last_time > FACE_COOLDOWN:
-            log_event(face_result["event"], attempt_id)
-            last_face_log[(attempt_id, face_result["event"])] = now
+    # ❗ IMPORTANT: ONLY STRINGS GO INTO log_event
+    if face_result["event"] is not None:
+        log_event(face_result["event"], attempt_id)
 
-    # ---------- SCORE EVALUATION ----------
-    evaluation = evaluate_attempt(attempt_id)
-    response.update(evaluation)
+    # evaluate score & warnings
+    result = evaluate_attempt(attempt_id)
+    response.update(result)
 
     return jsonify(response)

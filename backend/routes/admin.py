@@ -1,13 +1,18 @@
-from flask import Blueprint, jsonify 
+from flask import Blueprint, jsonify
 from db.attempts import auto_flag_abandoned_attempts
-from db.connection import get_db 
+from db.connection import get_db
 
-admin_bp = Blueprint("admin", __name__)
+# ✅ Admin Blueprint with prefix
+admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
-@admin_bp.route("/admin/attempts", methods=["GET"])
+
+# -----------------------------------
+# ADMIN: All Attempts (Dashboard)
+# -----------------------------------
+@admin_bp.route("/attempts", methods=["GET"])
 def admin_attempts():
     try:
-        # 🔥 AUTO-FLAG ABANDONED EXAMS
+        # 🔥 Auto-flag abandoned exams
         auto_flag_abandoned_attempts()
 
         conn, cur = get_db()
@@ -17,6 +22,7 @@ def admin_attempts():
             ORDER BY started_at DESC
         """)
         rows = cur.fetchall()
+
         cur.close()
         conn.close()
 
@@ -35,6 +41,7 @@ def admin_attempts():
         print("ADMIN ATTEMPTS ERROR:", e)
         return jsonify({"error": "Failed to fetch attempts"}), 500
 
+
 # -----------------------------------
 # ADMIN: Attempt Timeline
 # -----------------------------------
@@ -45,7 +52,7 @@ def admin_attempt_events(attempt_id):
     cur.execute("""
         SELECT event_type, created_at
         FROM cheating_events
-        WHERE attempt_id=%s
+        WHERE attempt_id = %s
         ORDER BY created_at
     """, (attempt_id,))
     rows = cur.fetchall()
@@ -72,18 +79,20 @@ def admin_attempt_details(attempt_id):
     cur.execute("""
         SELECT user_id, exam_id, cheating_score, status, started_at, ended_at
         FROM exam_attempts
-        WHERE id=%s
+        WHERE id = %s
     """, (attempt_id,))
     attempt = cur.fetchone()
 
     if not attempt:
+        cur.close()
+        conn.close()
         return jsonify({"error": "Attempt not found"}), 404
 
     # Cheating events
     cur.execute("""
         SELECT event_type, weight, created_at
         FROM cheating_events
-        WHERE attempt_id=%s
+        WHERE attempt_id = %s
         ORDER BY created_at
     """, (attempt_id,))
     events = cur.fetchall()
