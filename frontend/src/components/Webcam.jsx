@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import WebcamLib from "react-webcam";
 
-function Webcam({ onCapture, warning }) {
+function Webcam({ onCapture, warningLevel }) {
   const webcamRef = useRef(null);
 
   useEffect(() => {
@@ -15,13 +15,16 @@ function Webcam({ onCapture, warning }) {
     return () => clearInterval(interval);
   }, [onCapture]);
 
-  // 🔥 BORDER COLOR LOGIC
-  const borderColor =
-    warning === "FINAL_WARNING" || warning === "PHONE_DETECTED"
-      ? "#dc2626"
-      : warning
-      ? "#f59e0b"
-      : "#22c55e";
+  // 🔥 BORDER COLOR LOGIC (FIXED)
+  const isCritical =
+    warningLevel === "FINAL_WARNING" ||
+    warningLevel === "PHONE_DETECTED";
+
+  const borderColor = isCritical
+    ? "#dc2626"
+    : warningLevel
+    ? "#f59e0b"
+    : "#22c55e";
 
   return (
     <div
@@ -32,10 +35,7 @@ function Webcam({ onCapture, warning }) {
         border: `3px solid ${borderColor}`,
         transition: "border 0.3s ease",
         boxShadow: "0 12px 35px rgba(0,0,0,0.35)",
-        animation:
-          warning === "FINAL_WARNING" || warning === "PHONE_DETECTED"
-            ? "pulse 1.2s infinite"
-            : "none"
+        animation: isCritical ? "pulse 1.2s infinite" : "none"
       }}
     >
       <div style={styles.videoWrapper}>
@@ -48,7 +48,7 @@ function Webcam({ onCapture, warning }) {
         />
       </div>
 
-      {/* 🔥 Inline animation keyframes */}
+      {/* 🔥 Pulse animation */}
       <style>
         {`
           @keyframes pulse {
@@ -65,15 +65,15 @@ function Webcam({ onCapture, warning }) {
 const styles = {
   videoWrapper: {
     width: "100%",
-    aspectRatio: "4 / 3",      // ✅ Stable camera ratio
+    aspectRatio: "4 / 3",   // ✅ stable ratio
     borderRadius: 14,
-    overflow: "hidden",        // ✅ No border cutting
+    overflow: "hidden",     // ✅ no edge cutting
     background: "#000"
   },
   video: {
     width: "100%",
     height: "100%",
-    objectFit: "cover"         // ✅ No stretching, no cropping
+    objectFit: "cover"      // ✅ no stretch
   }
 };
 

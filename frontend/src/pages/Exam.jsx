@@ -40,9 +40,11 @@ function Exam() {
       });
 
       const data = await res.json();
+
       if (data.warning) {
         setWarning(data.warning);
       }
+
       if (data.status === "TERMINATED") {
         setTerminated(true);
       }
@@ -70,15 +72,20 @@ function Exam() {
       });
 
       const data = await res.json();
+
+      // 📱 PHONE DETECTED (HIGHEST PRIORITY)
       if (data.phone_detected) {
         setWarning("PHONE_DETECTED");
+      } 
+      // ⚠️ OTHER WARNINGS
+      else if (data.warning) {
+        setWarning(data.warning);
       }
-      if (data.status?.includes("WARNING")) {
-        setWarning(data.status);
-      }
+
       if (data.status === "TERMINATED") {
         setTerminated(true);
       }
+
     } catch (err) {
       console.error("Backend error:", err);
     }
@@ -94,7 +101,7 @@ function Exam() {
     setSubmitted(true);
   };
 
-  // ---------------- TERMINATED SCREEN ----------------
+  // ---------------- TERMINATED ----------------
   if (terminated) {
     return (
       <div style={styles.terminatedWrapper}>
@@ -112,7 +119,7 @@ function Exam() {
     );
   }
 
-  // ---------------- SUBMITTED SCREEN ----------------
+  // ---------------- SUBMITTED ----------------
   if (submitted) {
     return (
       <div style={styles.submitWrapper}>
@@ -127,7 +134,6 @@ function Exam() {
     );
   }
 
-  // ---------------- EXAM UI ----------------
   return (
     <div style={styles.page}>
       {/* HEADER */}
@@ -138,33 +144,37 @@ function Exam() {
           Submit
         </button>
       </div>
+
       {/* ---------- WARNING BANNER ---------- */}
-{warning && (
-  <div
-    style={{
-      margin: "12px 0",
-      padding: "12px 16px",
-      borderRadius: 10,
-      fontWeight: 600,
-      textAlign: "center",
-      background:
-        warning === "WARNING"
-          ? "#fef3c7"
-          : warning === "WARNING_YELLOW"
-          ? "#fde68a"
-          : "#fecaca",
-      color:
-        warning === "FINAL_WARNING"
-          ? "#7f1d1d"
-          : "#78350f",
-      boxShadow: "0 4px 10px rgba(0,0,0,0.08)"
-    }}
-  >
-    {warning === "WARNING" && "⚠️ Suspicious activity detected. Please focus on the exam."}
-    {warning === "WARNING_YELLOW" && "⚠️ Multiple violations detected. Further issues may terminate the exam."}
-    {warning === "FINAL_WARNING" && "🚨 FINAL WARNING! Next violation will terminate your exam."}
-  </div>
-)}
+      {warning && (
+        <div
+          style={{
+            margin: "12px 0",
+            padding: "12px 16px",
+            borderRadius: 10,
+            fontWeight: 600,
+            textAlign: "center",
+            background:
+              warning === "PHONE_DETECTED"
+                ? "#fee2e2"
+                : warning === "FINAL_WARNING"
+                ? "#fecaca"
+                : warning === "WARNING_YELLOW"
+                ? "#fde68a"
+                : "#fef3c7",
+            color:
+              warning === "PHONE_DETECTED"
+                ? "#7f1d1d"
+                : "#78350f",
+            boxShadow: "0 4px 10px rgba(0,0,0,0.08)"
+          }}
+        >
+          {warning === "PHONE_DETECTED" && "🚫 Mobile phone detected. Remove it immediately."}
+          {warning === "WARNING" && "⚠️ Suspicious activity detected. Please focus on the exam."}
+          {warning === "WARNING_YELLOW" && "⚠️ Multiple violations detected. Further issues may terminate the exam."}
+          {warning === "FINAL_WARNING" && "🚨 FINAL WARNING! Next violation will terminate your exam."}
+        </div>
+      )}
 
       {/* BODY */}
       <div style={styles.layout}>
@@ -240,22 +250,24 @@ function Exam() {
 
       {/* FLOATING WEBCAM */}
       <div style={styles.webcamWrapper}>
-  <div style={styles.webcamHeader}>
-    <span style={styles.webcamTitle}>Proctoring Camera</span>
-    <span style={styles.liveBadge}>
-      <span style={styles.liveDot} /> LIVE
-    </span>
-  </div>
+        <div style={styles.webcamHeader}>
+          <span style={styles.webcamTitle}>Proctoring Camera</span>
+          <span style={styles.liveBadge}>
+            <span style={styles.liveDot} /> LIVE
+          </span>
+        </div>
 
-  <div style={styles.webcamBody}>
-    <Webcam onCapture={sendFrameToBackend} />
-  </div>
+        <div style={styles.webcamBody}>
+          <Webcam
+            onCapture={sendFrameToBackend}
+            warningLevel={warning}
+          />
+        </div>
 
-  <div style={styles.webcamFooter}>
-    Face monitoring active
-  </div>
-</div>
-
+        <div style={styles.webcamFooter}>
+          Face & device monitoring active
+        </div>
+      </div>
     </div>
   );
 }
