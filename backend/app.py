@@ -42,6 +42,29 @@ def get_db():
     conn = psycopg2.connect(DATABASE_URL)
     return conn, conn.cursor()
 
+def auto_flag_abandoned_attempts():
+    """
+    Any exam that:
+    - is ONGOING
+    - has NO ended_at
+    - started more than X minutes ago
+    should be FLAGGED
+    """
+    conn, cur = get_db()
+
+    cur.execute("""
+        UPDATE exam_attempts
+        SET status = 'FLAGGED'
+        WHERE status = 'ONGOING'
+          AND ended_at IS NULL
+          AND started_at < NOW() - INTERVAL '2 minutes'
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 def get_event_weight(event_type):
     conn, cur = get_db()
     cur.execute(
@@ -272,6 +295,9 @@ def log_frontend_event():
 @app.route("/admin/attempts", methods=["GET"])
 def admin_attempts():
     try:
+        # 🔥 AUTO-FLAG ABANDONED EXAMS
+        auto_flag_abandoned_attempts()
+
         conn, cur = get_db()
         cur.execute("""
             SELECT id, user_id, exam_id, cheating_score, status, started_at
@@ -296,6 +322,7 @@ def admin_attempts():
     except Exception as e:
         print("ADMIN ATTEMPTS ERROR:", e)
         return jsonify({"error": "Failed to fetch attempts"}), 500
+
 
 # -----------------------------------
 # ADMIN: Events for Attempt
