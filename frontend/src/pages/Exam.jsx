@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
+import { API_BASE } from "../config/api";
 import Webcam from "../components/Webcam";
 import { questions } from "../data/questions";
 import { startTabMonitoring } from "../utils/monitor";
@@ -18,7 +18,7 @@ function Exam() {
 
   // ---------------- START EXAM ----------------
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/start-exam", {
+    fetch(`${API_BASE}/start-exam`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ exam_id: "ai_exam_1" })
@@ -33,7 +33,7 @@ function Exam() {
     if (!attemptId || submitted || terminated) return;
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/log-event", {
+      const res = await fetch(`${API_BASE}/log-event`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event, attempt_id: attemptId })
@@ -65,7 +65,7 @@ function Exam() {
     if (!attemptId || submitted || terminated) return;
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/analyze-frame", {
+      const res = await fetch(`${API_BASE}/analyze-frame`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image, attempt_id: attemptId })
@@ -93,7 +93,7 @@ function Exam() {
 
   // ---------------- SUBMIT ----------------
   const handleSubmit = async () => {
-    await fetch("http://127.0.0.1:5000/end-exam", {
+    await fetch(`${API_BASE}/end-exam`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ attempt_id: attemptId })

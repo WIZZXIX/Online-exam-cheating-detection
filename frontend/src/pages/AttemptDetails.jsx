@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-
+import { API_BASE } from "../config/api";
 function AttemptDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    fetch(`http://127.0.0.1:5000/admin/attempt/${id}/details`)
+    fetch(`${API_BASE}/admin/attempt/${id}/details`)
       .then(res => res.json())
       .then(setData)
       .catch(err => console.error(err));

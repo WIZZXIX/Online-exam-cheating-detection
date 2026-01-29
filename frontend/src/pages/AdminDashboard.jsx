@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
+import { API_BASE } from "../config/api";
 function AdminDashboard() {
   const navigate = useNavigate();
   const [attempts, setAttempts] = useState([]);
   const [filter, setFilter] = useState("ALL");
 
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/admin/attempts")
+    fetch(`${API_BASE}/admin/attempts`)
       .then(res => res.json())
       .then(data => setAttempts(data))
       .catch(err => console.error("Fetch error:", err));
