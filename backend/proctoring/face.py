@@ -34,9 +34,11 @@ def analyze_face(frame):
 
     offset = nose_x - ((left + right) / 2)
 
-    if offset > 0.06:
+    # UPDATED THRESHOLDS: Changed from 0.06 to 0.10
+    # This prevents false flags when reading the corners of the screen.
+    if offset > 0.10:
         return {"faces": 1, "direction": "LEFT", "event": "LOOKING_LEFT"}
-    if offset < -0.06:
+    if offset < -0.10:
         return {"faces": 1, "direction": "RIGHT", "event": "LOOKING_RIGHT"}
 
     return {"faces": 1, "direction": "CENTER", "event": None}
