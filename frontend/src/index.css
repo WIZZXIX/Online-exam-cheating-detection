@@ -1,5 +1,11 @@
+* {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
 body {
     margin: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
     font-family: "Inter", system-ui, Arial, sans-serif;
     background: linear-gradient(180deg, #b3e5fc, #e1f5fe);
     min-height: 100vh;
