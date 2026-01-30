@@ -10,7 +10,7 @@ function Webcam({ onCapture, warningLevel }) {
         const imageSrc = webcamRef.current.getScreenshot();
         if (imageSrc) onCapture(imageSrc);
       }
-    }, 2000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [onCapture]);
@@ -73,7 +73,7 @@ const styles = {
   video: {
     width: "100%",
     height: "100%",
-    objectFit: "cover"      // ✅ no stretch
+    objectFit: "contain"      // ✅ no stretch
   }
 };
 
