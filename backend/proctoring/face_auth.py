@@ -14,31 +14,24 @@ DISTANCE_THRESHOLD = 0.35     # tuned for Facenet512 (strict)
 # FACE EMBEDDING
 # -----------------------------------
 def get_face_embedding(face_img):
-    """
-    face_img: cropped face (BGR OpenCV image)
-    returns: list[float] | None
-    """
-
-    if face_img is None:
-        return None
-
     try:
-        face_rgb = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
+        face_img = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
 
-        embeddings = DeepFace.represent(
-            img_path=face_rgb,
-            model_name=MODEL_NAME,
+        result = DeepFace.represent(
+            img_path=face_img,
+            model_name="Facenet512",
             enforce_detection=False
         )
 
-        if not embeddings:
+        if not result or "embedding" not in result[0]:
             return None
 
-        return embeddings[0]["embedding"]
+        return result[0]["embedding"]
 
     except Exception as e:
-        print("[FACE_AUTH] Embedding error:", e)
+        print("❌ Face embedding error:", e)
         return None
+
 
 
 # -----------------------------------

@@ -21,7 +21,7 @@ function Login() {
       email === "student@example.com" &&
       password === "exam123"
     ) {
-      navigate("/exam");
+      navigate("/face-verify");
     } else if (
       role === "admin" &&
       email === "admin@example.com" &&

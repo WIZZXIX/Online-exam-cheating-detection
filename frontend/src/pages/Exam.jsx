@@ -5,6 +5,8 @@ import Webcam from "../components/Webcam";
 import { questions } from "../data/questions";
 import { startTabMonitoring } from "../utils/monitor";
 import { blockClipboard } from "../utils/clipboard";
+import { useLocation } from "react-router-dom";
+
 
 // INSTRUCTIONS:
 // Ensure you have this font imported in your index.html or index.css:
@@ -65,7 +67,7 @@ function Exam() {
     if (!attemptId || submitted || terminated) return;
 
     try {
-      const res = await fetch(`${API_BASE}/analyze-frame`, { 
+      const res = await fetch(`${API_BASE}/analyze-frame`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image, attempt_id: attemptId })
@@ -73,13 +75,18 @@ function Exam() {
 
       const data = await res.json();
 
-      if (data.warnings && data.warnings.includes("PHONE_DETECTED")) {
-        setWarning("PHONE_DETECTED");
-      } else if (data.ui_warning) {
-        setWarning(data.ui_warning);
+      // ---- UI WARNINGS ----
+      if (data.warning) {
+        setWarning(data.warning);
       }
 
-      if (data.exam_status === "TERMINATED") {
+      // ---- IDENTITY MISMATCH ----
+      if (data.identity_mismatch) {
+        setWarning("IDENTITY_MISMATCH");
+      }
+
+      // ---- TERMINATION ----
+      if (data.status === "TERMINATED") {
         setTerminated(true);
       }
 

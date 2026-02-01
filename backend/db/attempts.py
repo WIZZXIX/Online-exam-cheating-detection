@@ -1,4 +1,5 @@
 from db.connection import get_db 
+from datetime import datetime
 
 def save_face_embedding(attempt_id, embedding):
     conn, cur = get_db()
@@ -107,3 +108,17 @@ def get_face_embedding(attempt_id):
         return None
 
     return row[0]  # returns list[float] or None
+
+def terminate_attempt(attempt_id):
+    conn, cur = get_db()
+
+    cur.execute("""
+        UPDATE exam_attempts
+        SET status = 'TERMINATED',
+            ended_at = %s
+        WHERE id = %s
+    """, (datetime.utcnow(), attempt_id))
+
+    conn.commit()
+    cur.close()
+    conn.close()
