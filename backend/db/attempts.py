@@ -1,19 +1,22 @@
 from db.connection import get_db 
 from datetime import datetime
+import json
 
 def save_face_embedding(attempt_id, embedding):
     conn, cur = get_db()
+
+    # Convert embedding to JSON string
+    embedding_json = json.dumps(embedding)
 
     cur.execute("""
         UPDATE exam_attempts
         SET face_embedding = %s
         WHERE id = %s
-    """, (embedding, attempt_id))
+    """, (embedding_json, attempt_id))
 
     conn.commit()
     cur.close()
     conn.close()
-
 
 def is_face_registered(attempt_id):
     conn, cur = get_db()
@@ -89,7 +92,7 @@ def auto_flag_abandoned_attempts():
     conn.commit()
     cur.close()
     conn.close()
-
+    
 def get_face_embedding(attempt_id):
     conn, cur = get_db()
 
@@ -104,10 +107,10 @@ def get_face_embedding(attempt_id):
     cur.close()
     conn.close()
 
-    if row is None:
-        return None
+    if row and row[0]:
+        return json.loads(row[0])  # convert JSON string back to list
 
-    return row[0]  # returns list[float] or None
+    return None
 
 def terminate_attempt(attempt_id):
     conn, cur = get_db()

@@ -5,6 +5,7 @@ import base64
 import time
 from collections import defaultdict
 
+# --- Custom Imports (Assuming these exist in your project structure) ---
 from proctoring.face import analyze_face, extract_face
 from proctoring.phone import detect_phone
 from proctoring.face_auth import (
@@ -21,29 +22,61 @@ from db.attempts import (
 
 proctoring_bp = Blueprint("proctoring", __name__)
 
-# -------------------------------------------------
-# CONFIG
-# -------------------------------------------------
+# =================================================
+# CONFIGURATION
+# =================================================
+
+# ---- NO FACE ----
 NO_FACE_THRESHOLD = 3
 NO_FACE_TIME_WINDOW = 8
+
+# ---- GENERAL COOLDOWN ----
 EVENT_COOLDOWN = 2
 
+# ---- PHONE DETECTION ----
+PHONE_DURATION_THRESHOLD = 3      # must see phone for 3 seconds
+PHONE_COOLDOWN = 8                # wait 8 sec before logging again
+
+# ---- HEAD MOVEMENT ----
+HEAD_DURATION_THRESHOLD = 2       # must look away 2 sec
+HEAD_COOLDOWN = 5
+
+# ---- GAZE MOVEMENT ----
+GAZE_DURATION_THRESHOLD = 2
+GAZE_COOLDOWN = 5
+
+# ---- FACE AUTH ----
 FACE_MISMATCH_THRESHOLD = 0.35
 FACE_MISMATCH_CONSECUTIVE = 3
 
-# -------------------------------------------------
+# =================================================
 # IN-MEMORY STATE
-# -------------------------------------------------
+# (Note: In production with multiple workers, use Redis/DB instead of global vars)
+# =================================================
+
 last_face_seen = {}
 no_face_counter = {}
-last_event_time = {}
 
+# Phone tracking
+phone_start_time = {}   # Tracks when the phone was first seen
+last_phone_logged = {}  # Tracks when we last logged a phone event
+
+# Head tracking
+head_start_time = {}
+last_head_logged = {}
+
+# Gaze tracking
+gaze_start_time = {}
+last_gaze_logged = {}
+
+# Identity
 face_mismatch_counter = defaultdict(int)
 identity_warning_issued = set()
 
-# -------------------------------------------------
+# =================================================
 # ANALYZE FRAME
-# -------------------------------------------------
+# =================================================
+
 @proctoring_bp.route("/analyze-frame", methods=["POST"])
 def analyze_frame():
     data = request.json
@@ -54,7 +87,7 @@ def analyze_frame():
     attempt_id = int(data["attempt_id"])
     image = data["image"]
 
-    # -------- Decode frame --------
+    # ---------------- DECODE FRAME ----------------
     try:
         image_bytes = base64.b64decode(image.split(",")[1])
         np_arr = np.frombuffer(image_bytes, np.uint8)
@@ -64,11 +97,9 @@ def analyze_frame():
 
     now = time.time()
 
-    # -------- Initialize state --------
+    # Initialize basic state if missing
     last_face_seen.setdefault(attempt_id, now)
     no_face_counter.setdefault(attempt_id, 0)
-    last_event_time.setdefault(attempt_id, 0)
-    face_mismatch_counter.setdefault(attempt_id, 0)
 
     response = {
         "faces_detected": 0,
@@ -79,29 +110,47 @@ def analyze_frame():
         "warning": None
     }
 
-    # -------------------------------------------------
-    # PHONE DETECTION
-    # -------------------------------------------------
+    # =================================================
+    # 1. PHONE DETECTION
+    # =================================================
     phone_detected = detect_phone(frame)
     response["phone_detected"] = phone_detected
 
     if phone_detected:
-        log_event("PHONE_DETECTED", attempt_id)
+        state = phone_start_time.get(attempt_id)
 
-    # -------------------------------------------------
-    # FACE ANALYSIS (HEAD + GAZE)
-    # -------------------------------------------------
+        # If this is the FIRST time seeing the phone in this sequence
+        if not state:
+            phone_start_time[attempt_id] = {"start": now}
+        
+        # If we are ALREADY tracking the phone
+        else:
+            duration = now - state["start"]
+            last_logged = last_phone_logged.get(attempt_id, 0)
+
+            # Check if we met the duration threshold
+            if duration >= PHONE_DURATION_THRESHOLD:
+                # Check if enough time has passed since the last log (Cooldown)
+                if (now - last_logged > PHONE_COOLDOWN):
+                    log_event("PHONE_DETECTED", attempt_id)
+                    last_phone_logged[attempt_id] = now
+                    # FIX: Do NOT pop phone_start_time here. Let the timer continue.
+    else:
+        # Phone is gone. Reset the timer.
+        phone_start_time.pop(attempt_id, None)
+
+    # =================================================
+    # 2. FACE ANALYSIS & EXTRACTION
+    # =================================================
     face_result = analyze_face(frame)
-
     response["faces_detected"] = face_result["faces"]
     response["direction"] = face_result["direction"]
     response["gaze"] = face_result.get("gaze", "CENTER")
-
     event = face_result["event"]
 
-    # -------------------------------------------------
-    # NO FACE HANDLING
-    # -------------------------------------------------
+    # =================================================
+    # 3. NO FACE HANDLING
+    # =================================================
     if event == "NO_FACE":
         no_face_counter[attempt_id] += 1
 
@@ -110,19 +159,19 @@ def analyze_frame():
             and now - last_face_seen[attempt_id] > NO_FACE_TIME_WINDOW
         ):
             log_event("NO_FACE", attempt_id)
-            last_event_time[attempt_id] = now
             no_face_counter[attempt_id] = 0
+            # Note: You might want a cooldown here too if NO_FACE logs too often
 
         response.update(evaluate_attempt(attempt_id))
         return jsonify(response)
 
-    # Face detected → reset
+    # Reset counters if face is found
     last_face_seen[attempt_id] = now
     no_face_counter[attempt_id] = 0
 
-    # -------------------------------------------------
-    # CONTINUOUS IDENTITY VERIFICATION
-    # -------------------------------------------------
+    # =================================================
+    # 4. IDENTITY VERIFICATION
+    # =================================================
     stored_embedding = get_face_embedding(attempt_id)
 
     if stored_embedding and face_result["faces"] == 1:
@@ -138,7 +187,7 @@ def analyze_frame():
                 else:
                     face_mismatch_counter[attempt_id] = 0
 
-                # ---- FIRST WARNING ----
+                # Warning Phase
                 if (
                     face_mismatch_counter[attempt_id] >= FACE_MISMATCH_CONSECUTIVE
                     and attempt_id not in identity_warning_issued
@@ -148,7 +197,7 @@ def analyze_frame():
                     response["warning"] = "IDENTITY_MISMATCH"
                     face_mismatch_counter[attempt_id] = 0
 
-                # ---- TERMINATION ----
+                # Termination Phase
                 elif (
                     face_mismatch_counter[attempt_id] >= FACE_MISMATCH_CONSECUTIVE
                     and attempt_id in identity_warning_issued
@@ -159,17 +208,63 @@ def analyze_frame():
                     return jsonify(response)
 
             except Exception as e:
-                print("Identity verification error:", e)
+                print(f"Identity verification error: {e}")
 
-    # -------------------------------------------------
-    # HEAD / GAZE EVENTS (Cooldown protected)
-    # -------------------------------------------------
-    if event and now - last_event_time[attempt_id] > EVENT_COOLDOWN:
-        log_event(event, attempt_id)
-        last_event_time[attempt_id] = now
+    # =================================================
+    # 5. HEAD MOVEMENT (Fix applied)
+    # =================================================
+    current_head = event if event in ["LOOKING_LEFT", "LOOKING_RIGHT"] else "CENTER"
+    head_state = head_start_time.get(attempt_id)
 
-    # -------------------------------------------------
-    # FINAL SCORE EVALUATION
-    # -------------------------------------------------
+    if current_head != "CENTER":
+        # New direction or first time looking away
+        if not head_state or head_state["direction"] != current_head:
+            head_start_time[attempt_id] = {
+                "direction": current_head,
+                "start": now
+            }
+        
+        # Continuing to look in the same direction
+        else:
+            duration = now - head_state["start"]
+            last_logged = last_head_logged.get(attempt_id, 0)
+
+            if duration >= HEAD_DURATION_THRESHOLD:
+                if (now - last_logged > HEAD_COOLDOWN):
+                    log_event(current_head, attempt_id)
+                    last_head_logged[attempt_id] = now
+                    # FIX: Do NOT pop head_start_time here.
+    else:
+        # Back to CENTER. Reset timer.
+        head_start_time.pop(attempt_id, None)
+
+    # =================================================
+    # 6. GAZE MOVEMENT (Fix applied)
+    # =================================================
+    current_gaze = response["gaze"] if response["gaze"] in ["GAZE_LEFT", "GAZE_RIGHT"] else "CENTER"
+    gaze_state = gaze_start_time.get(attempt_id)
+
+    if current_gaze != "CENTER":
+        if not gaze_state or gaze_state["direction"] != current_gaze:
+            gaze_start_time[attempt_id] = {
+                "direction": current_gaze,
+                "start": now
+            }
+        else:
+            duration = now - gaze_state["start"]
+            last_logged = last_gaze_logged.get(attempt_id, 0)
+
+            if duration >= GAZE_DURATION_THRESHOLD:
+                if (now - last_logged > GAZE_COOLDOWN):
+                    log_event(current_gaze, attempt_id)
+                    last_gaze_logged[attempt_id] = now
+                    # FIX: Do NOT pop gaze_start_time here.
+    else:
+        gaze_start_time.pop(attempt_id, None)
+
+    # =================================================
+    # FINAL SCORE UPDATE
+    # =================================================
     response.update(evaluate_attempt(attempt_id))
+    
     return jsonify(response)
